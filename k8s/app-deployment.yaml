@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: springapp
+  labels:
+    app: springapp
+  namespace: thanhnc85
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: springapp
+  template:
+    metadata:
+      labels:
+        app: springapp
+    spec:
+      serviceAccount: springapp-mysql
+      containers:
+      - name: springapp
+        image: thanhregistry.azurecr.io/springapp:129
+        imagePullPolicy: Always
+        securityContext:
+          runAsUser: 0
+          privileged: true
+        ports:
+          - name: http
+            containerPort: 8080
+        env:
+        - name: DBSERVER
+          valueFrom:
+            secretKeyRef:
+              name: springapp-keyvault-secret
+              key: mysql-server
+        - name: DBUSERNAME
+          valueFrom:
+            secretKeyRef:
+              name: springapp-keyvault-secret
+              key: mysql-user-username
+        - name: DBPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: springapp-keyvault-secret
+              key: mysql-user-password
+        - name: DBNAME
+          valueFrom:
+            secretKeyRef:
+              name: springapp-keyvault-secret
+              key: mysql-database-name
+        volumeMounts:
+        - name: log-path
+          mountPath: /var/log
+        - name: springapp-keyvault-secret-store
+          mountPath: "/thanhnc85/thanhkeyvault"
+      volumes:
+      - name: log-path
+        hostPath:
+          path: /var/log/thanhnc85
+          type: DirectoryOrCreate
+      - name: springapp-keyvault-secret-store
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: azure-thanhkeyvault-secret-provider
+      imagePullSecrets:
+        - name: acr-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: springapp-svc
+  labels:
+    app: springapp
+  namespace: thanhnc85
+spec:
+  type: ClusterIP
+  selector:
+    app: springapp
+  ports:
+  - protocol: TCP
+    name: http
+    port: 8080
+    targetPort: 8080
+---
+# apiVersion: monitoring.coreos.com/v1
+# kind: ServiceMonitor
+# metadata:
+#   labels:
+#     app: springapp
+#   name: springapp-svc-monitor
+#   namespace: thanhnc85
+# spec:
+#   endpoints:
+#     - interval: 15s
+#       port: http
+#       path: /actuator/prometheus
+#       scheme: http
+#   selector:
+#     matchLabels:
+#       app: springapp

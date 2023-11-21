@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: springapp-configmap
+data:
+  azure-keyvault-endpoint: https://thanhkeyvault.vault.azure.net/
+  mysql-database-name: petclinic

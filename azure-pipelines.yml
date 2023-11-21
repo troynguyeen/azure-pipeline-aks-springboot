@@ -1,0 +1,196 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- main
+
+pool:
+  name: Apple Agent
+  demands:
+    - agent.name -equals agent-mac
+
+variables:
+  - name: JDK_VERSION_17
+    value: 17
+  - name: JDK_VERSION_20
+    value: 20
+  - name: JAVA_HOME_17_X64
+    value: /Library/Java/JavaVirtualMachines/openjdk-17.jdk/Contents/Home
+  - name: JAVA_HOME_20_X64
+    value: /Library/Java/JavaVirtualMachines/jdk-20.jdk/Contents/Home
+  - name: M2_HOME_322
+    value: /Library/Maven/apache-maven-3.2.2
+  - name: M2_HOME_395
+    value: /Library/Maven/apache-maven-3.9.5
+
+stages:
+- stage: SET_UP_STAGE
+  displayName: Set Up Environment
+  jobs:
+  - job: SET_UP_JOB
+    displayName: Set up Java & Maven
+    steps:
+    - task: JavaToolInstaller@0
+      inputs:
+        versionSpec: "$(JDK_VERSION_17)"
+        jdkArchitectureOption: x64
+        jdkSourceOption: 'PreInstalled'
+    - script: |
+        java -version
+      displayName: "Check JDK version"
+      env:
+        JAVA_HOME: $(JAVA_HOME_17_X64)
+        PATH: $(JAVA_HOME_17_X64)/bin:$(PATH)
+    - script: |
+        mvn -version
+        echo $M2_HOME
+      displayName: "Check maven version"
+      env:
+        M2_HOME: $(M2_HOME_395)
+        PATH: $(M2_HOME_395)/bin:$(PATH)
+
+- stage: BUILD_STAGE
+  displayName: Build
+  jobs:
+  - job: BUILD_JOB
+    displayName: Build Code
+    steps:
+    - task: Maven@3
+      inputs:
+        mavenPomFile: 'pom.xml'
+        mavenOptions: '-Xmx3072m'
+        javaHomeOption: 'JDKVersion'
+        jdkVersionOption: '$(JDK_VERSION_17)'
+        jdkArchitectureOption: 'x64'
+        mavenVersionOption: 'Default'
+        publishJUnitResults: true
+        testResultsFiles: 'target/surefire-reports/*.xml'
+        goals: 'clean package -B -DskipTests'
+      env:
+        M2_HOME: $(M2_HOME_395)
+        PATH: $(M2_HOME_395)/bin:$(PATH)
+
+- stage: TEST_STAGE
+  displayName: Test
+  jobs:
+  - job: TEST_JOB
+    displayName: Unit Test
+    steps:
+    - task: Maven@3
+      inputs:
+        mavenPomFile: 'pom.xml'
+        mavenOptions: '-Xmx3072m'
+        javaHomeOption: 'JDKVersion'
+        jdkVersionOption: '$(JDK_VERSION_17)'
+        jdkArchitectureOption: 'x64'
+        mavenVersionOption: 'Default'
+        publishJUnitResults: true
+        testResultsFiles: 'target/surefire-reports/*.xml'
+        goals: 'test'
+      env:
+        M2_HOME: $(M2_HOME_395)
+        PATH: $(M2_HOME_395)/bin:$(PATH)
+
+- stage: SCAN_STAGE
+  displayName: Scan
+  jobs:
+  - job: SCAN_JOB
+    displayName: Scan Code
+    steps:
+    - task: SonarCloudPrepare@1
+      inputs:
+        SonarCloud: 'sonar-cloud'
+        organization: 'troynguyeen'
+        scannerMode: 'Other'
+        extraProperties: |
+          # Additional properties that will be passed to the scanner,
+          # Put one key=value per line, example:
+          # sonar.exclusions=**/*.bin
+          sonar.projectKey="troynguyeen_Spring-App"
+          sonar.projectName="Spring App"
+    - task: Maven@3
+      inputs:
+        mavenPomFile: 'pom.xml'
+        mavenOptions: '-Xmx3072m'
+        javaHomeOption: 'JDKVersion'
+        jdkVersionOption: '$(JDK_VERSION_17)'
+        jdkArchitectureOption: 'x64'
+        mavenVersionOption: 'Default'
+        publishJUnitResults: true
+        testResultsFiles: 'target/surefire-reports/*.xml'
+        goals: 'clean verify sonar:sonar'
+      env:
+        M2_HOME: $(M2_HOME_395)
+        PATH: $(M2_HOME_395)/bin:$(PATH)
+    - task: SonarCloudAnalyze@1
+      inputs:
+        jdkversion: 'JAVA_HOME_17_X64'
+    - task: SonarCloudPublish@1
+      inputs:
+        pollingTimeoutSec: '300'
+
+- stage: PUSH_STAGE
+  displayName: Push
+  jobs:
+  - job: PUSH_JOB
+    displayName: Push image to Azure Container Registry
+    steps:
+    - task: Maven@3
+      inputs:
+        mavenPomFile: 'pom.xml'
+        mavenOptions: '-Xmx3072m'
+        javaHomeOption: 'JDKVersion'
+        jdkVersionOption: '$(JDK_VERSION_17)'
+        jdkArchitectureOption: 'x64'
+        mavenVersionOption: 'Default'
+        publishJUnitResults: true
+        testResultsFiles: 'target/surefire-reports/*.xml'
+        goals: 'clean package -B -DskipTests'
+      env:
+        M2_HOME: $(M2_HOME_395)
+        PATH: $(M2_HOME_395)/bin:$(PATH)
+    - task: Docker@2
+      displayName: Build image to Azure Container Registry
+      inputs:
+        containerRegistry: 'azure-container-registry'
+        repository: 'springapp'
+        command: build
+        Dockerfile: '**/Dockerfile'
+        arguments: '--platform linux/amd64'
+        tags: $(Build.BuildId)
+    - task: Docker@2
+      displayName: Push image to Azure Container Registry
+      inputs:
+        containerRegistry: 'azure-container-registry'
+        repository: 'springapp'
+        command: push
+        tags: $(Build.BuildId)
+
+- stage: DEPLOY_STAGE
+  displayName: Deploy
+  jobs:
+  - job: DEPLOY_JOB
+    displayName: Deploy to Azure Kubernetes Service
+    steps:
+    # - task: KubernetesManifest@0
+    #   displayName: Create imagePullSecret for AKS
+    #   inputs:
+    #     action: createSecret
+    #     secretName: acr-secret
+    #     namespace: thanhnc85
+    #     dockerRegistryEndpoint: azure-container-registry
+    #     kubernetesServiceConnection: aks-service-connection
+    - task: KubernetesManifest@0
+      displayName: Deploy to AKS cluster
+      inputs:
+        action: deploy
+        namespace: thanhnc85
+        kubernetesServiceConnection: aks-service-connection
+        manifests: |
+          k8s/app-deployment.yaml
+        imagePullSecrets: |
+          acr-secret
+        containers: |
+          thanhregistry.azurecr.io/springapp:$(Build.BuildId)

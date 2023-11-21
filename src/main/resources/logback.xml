@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+  <springProperty scope="context" name="appName" source="spring.application.name" />
+  <appender name="Console" class="ch.qos.logback.core.ConsoleAppender">
+    <layout class="ch.qos.logback.classic.PatternLayout">
+      <Pattern>%magenta(%d{yyyy-MM-dd HH:mm:ss.SSS}) %cyan([%thread]) %highlight(%-5level) %green(%mdc{traceId}) %red(${appName}) %yellow(%-20logger{40}) %boldWhite([%X{CONTROLLER}]) %cyan(%X{HOST_CLIENT_IP}) %msg%n</Pattern>
+    </layout>
+  </appender>
+
+  <property name="LOG_DIR" value="log" />
+  <appender name="RollingFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+      <Pattern>%magenta(%d{yyyy-MM-dd HH:mm:ss.SSS}) %cyan([%thread]) %highlight(%-5level) %green(%mdc{traceId}) %red(${appName}) %yellow(%-20logger{40}) %boldWhite([%X{CONTROLLER}]) %cyan(%X{HOST_CLIENT_IP}) %msg%n</Pattern>
+    </encoder>
+      
+    <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+        <fileNamePattern>${LOG_DIR}/springboot_%d{yyMMdd}_%i.log</fileNamePattern>
+        <maxFileSize>10KB</maxFileSize>
+        <cleanHistoryOnStart>true</cleanHistoryOnStart>
+    </rollingPolicy>
+  </appender>
+
+  <root level="ERROR">
+    <appender-ref ref="Console"/>
+    <appender-ref ref="RollingFile" />
+  </root>
+  
+</configuration>
